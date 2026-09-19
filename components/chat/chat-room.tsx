@@ -3945,6 +3945,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 characterId?: string;
                 handled?: boolean;
                 busy?: boolean;
+                interruptCurrent?: boolean;
             }>).detail;
             const requestSessionId = typeof detail?.sessionId === "string" ? detail.sessionId : "";
             const requestCharacterId = typeof detail?.characterId === "string" ? detail.characterId : "";
@@ -3955,6 +3956,23 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 
             if (detail) detail.handled = true;
             syncMessagesFromStorage();
+            // 拉黑/解除拉黑属于会话状态切换，旧请求即使完成也只会基于旧状态回答。
+            // 立即中止旧轮并用最新落库状态重启，避免在慢 API 后面再排一整轮。
+            if (detail?.interruptCurrent && activeGenerationRuns.has(session.id)) {
+                cancelGenerationRun(session.id);
+                if (streamParseFrameRef.current) {
+                    cancelAnimationFrame(streamParseFrameRef.current);
+                    streamParseFrameRef.current = 0;
+                }
+                streamAccumRef.current = "";
+                setStreamPreview(null);
+                pendingReplyRequestRef.current = false;
+                isGeneratingRef.current = false;
+                setIsGenerating(false);
+                clearGenerationLock(session.id);
+                void triggerAIResponse();
+                return;
+            }
             // 真在生成中：如实告知调用方（避免记成「已生成回应」）。
             // 注意：pendingGenerate 兜底只在「最后一条是用户消息」时才会补触发（见 finally 块），
             // 拉黑/解除拉黑等系统事件触发的回复请求最后一条是 role:"system"，走不到那条兜底——

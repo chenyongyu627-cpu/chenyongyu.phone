@@ -1798,6 +1798,9 @@ export async function buildChatPromptMessages(
     userIdentity: ReturnType<typeof resolveUserIdentity>;
     toolsEnabled: boolean;
 }> {
+    // 设置页可能在聊天室仍挂载时更新会话对象。每次组装提示词都重新读取落库状态，
+    // 避免拉黑/解除拉黑刚切换后仍使用进入聊天室时的旧 session 快照。
+    session = loadChatSessions().find(item => item.id === session.id) ?? session;
     const chars = loadCharacters();
     const character = chars.find(c => c.id === session.contactId);
     if (!character) throw new ChatEngineError(`Character not found: ${session.contactId}`);

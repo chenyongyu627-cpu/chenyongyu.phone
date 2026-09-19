@@ -761,7 +761,9 @@ export function ChatSettingsPanel({
             mediaData: { blacklistEvent: blocked ? "block" : "unblock" },
         });
         // 让角色「知道」并做出反应：走聊天室完整生成管线（聊天页未挂载时由桌面壳兜底）
-        window.dispatchEvent(new CustomEvent(CHAT_REQUEST_REPLY_EVENT, { detail: { sessionId: session.id } }));
+        window.dispatchEvent(new CustomEvent(CHAT_REQUEST_REPLY_EVENT, {
+            detail: { sessionId: session.id, interruptCurrent: true },
+        }));
     };
 
     const handleClearHistory = () => {

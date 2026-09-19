@@ -5233,39 +5233,22 @@
 
 /* ── Memory Timeline ── */
 
-/* 外层统一卡片：标签筛选条 + 记忆卡片列表现在同属一张卡片（此前是两个平级元素，
-   标签条自己 sticky+负 margin 贴边，容易在移动端和纵向滚动打架，
-   表现为「随意滑动」，也更容易被内容盖住）。 */
-.mem-tl-shell {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  margin-top: 14px;
-  border: 1px solid var(--c-panel-border);
-  border-radius: 16px;
-  background: var(--c-panel);
-  overflow: hidden;
-}
-
-/* 顶部来源标签收纳筛选条：横向滑动胶囊，贴着卡片顶部，随卡片一起滚动。
-   touch-action / overscroll-behavior-x 限定手势只作用于横向，
-   避免在移动端和页面纵向滚动互相抢手势导致的「随意滑动」。 */
+/* 顶部来源标签是独立筛选条；记忆事件仍由页面本身纵向滚动。 */
 .mem-tl-tag-bar {
   position: sticky;
   top: 0;
   z-index: 9;
-  flex: 0 0 auto;
   display: flex;
   gap: 8px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 12px;
-  border-bottom: 1px solid var(--c-panel-border);
-  touch-action: pan-x;
+  padding: 10px 0 8px;
+  margin-bottom: 4px;
+  touch-action: pan-x pan-y;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  background: color-mix(in srgb, var(--c-panel) 94%, transparent);
+  background: color-mix(in srgb, var(--c-page-body-bg) 94%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -5282,7 +5265,7 @@
   padding: 6px 13px;
   border: 1px solid var(--c-panel-border);
   border-radius: 999px;
-  background: var(--c-page-body-bg);
+  background: var(--c-panel);
   color: var(--c-icon);
   font-size: calc(11.5px*var(--app-text-scale,1));
   font-weight: 500;
@@ -5305,16 +5288,12 @@
   opacity: 0.72;
 }
 
-/* 标签条下方的正文区域（空态文案 / 卡片列表 / 加载更多按钮） */
-.mem-tl-body {
-  padding: 14px 12px 14px;
-}
-
 .mem-tl {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding-top: 6px;
 }
 
 /* Card */
