@@ -5969,8 +5969,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                     <span className="chat-blacklist-event-detail">
                                                         <span>时间：{formatChatUiTime(msg.createdAt)}</span>
                                                         <span>{blacklistEvent === "block"
-                                                            ? `${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}被${msg.mediaData?.blacklistUserName || userIdentity?.name || "用户"}拉黑了`
-                                                            : `${msg.mediaData?.blacklistUserName || userIdentity?.name || "用户"}解除了对${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}的拉黑`}</span>
+                                                            ? `${msg.mediaData?.blacklistUserName || userIdentity?.name || "用户"}把${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}私聊拉黑了，${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}发出的消息会被拒收`
+                                                            : `${msg.mediaData?.blacklistUserName || userIdentity?.name || "用户"}解除了对${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}的私聊拉黑，${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}发出的消息恢复正常接收`}</span>
                                                     </span>
                                                 )}
                                             </div>
