@@ -21,6 +21,7 @@ import {
     resolveVisionImagePromptLimit,
     type ChatMessage,
 } from "@/lib/chat-storage";
+import { saveMemoryEntry } from "@/lib/memory-storage";
 import {
     GROUP_SELF_KEY,
     applyGroupAdminAction,
@@ -744,13 +745,22 @@ export function ChatSettingsPanel({
         }
     };
 
-    // 仿真拉黑：开关只落库并插入一条会话事件。
-    // 不再额外请求 AI；事件会像通话记录一样进入后续正常聊天的上下文。
+    // 仿真拉黑：系统消息仅用于聊天页展示；事实直接写入角色长期记忆。
+    // 全程只做本地存储，不额外请求 AI 或 embedding API。
     const handleToggleBlacklist = (blocked: boolean) => {
         setIsBlacklisted(blocked);
         updateSession({ isBlacklisted: blocked });
+
         const charLabel = character?.name || characterName;
         const userLabel = userIdentity?.name || "用户";
+        const occurredAt = new Date();
+        const occurredAtIso = occurredAt.toISOString();
+        const padTimePart = (value: number) => String(value).padStart(2, "0");
+        const occurredAtText = `${occurredAt.getFullYear()}-${padTimePart(occurredAt.getMonth() + 1)}-${padTimePart(occurredAt.getDate())} ${padTimePart(occurredAt.getHours())}:${padTimePart(occurredAt.getMinutes())}:${padTimePart(occurredAt.getSeconds())}`;
+        const memoryContent = blocked
+            ? `时间：${occurredAtText}；${charLabel}被${userLabel}拉黑了`
+            : `时间：${occurredAtText}；${userLabel}解除了对${charLabel}的拉黑`;
+
         pushChatMessage({
             sessionId: session.id,
             role: "system",
@@ -762,6 +772,27 @@ export function ChatSettingsPanel({
                 blacklistCharacterName: charLabel,
                 blacklistUserName: userLabel,
             },
+        });
+
+        void saveMemoryEntry({
+            id: `mem_lt_blacklist_${blocked ? "block" : "unblock"}_${occurredAt.getTime()}_${Math.random().toString(36).slice(2, 8)}`,
+            characterId: session.contactId,
+            sourceApp: "chat",
+            type: "long_term",
+            content: memoryContent,
+            importance: 1,
+            createdAt: occurredAtIso,
+            updatedAt: occurredAtIso,
+            metadata: {
+                origin: "blacklist_toggle",
+                eventType: blocked ? "blacklist_blocked" : "blacklist_unblocked",
+                eventTime: occurredAtIso,
+                sessionId: session.id,
+                characterName: charLabel,
+                userName: userLabel,
+            },
+        }).catch(error => {
+            console.error("[ChatSettings] Save blacklist memory failed:", error);
         });
     };
 

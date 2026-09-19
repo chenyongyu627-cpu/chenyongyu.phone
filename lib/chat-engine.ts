@@ -483,7 +483,7 @@ function isToolFlowHistoryMessage(message: ChatMessage): boolean {
         || message.mediaType === "memory_write_request";
 }
 
-/** history 末尾是仿真拉黑/解除拉黑系统事件 → 这是角色必须作出反应的戏内事件。 */
+/** history 末尾是拉黑/解除拉黑展示事件 → 允许手动生成；事实本身从角色长期记忆读取。 */
 function isBlacklistEventHistoryMessage(message: ChatMessage): boolean {
     return message.role === "system"
         && (message.mediaData?.blacklistEvent === "block" || message.mediaData?.blacklistEvent === "unblock");
@@ -1965,7 +1965,7 @@ export async function buildChatPromptMessages(
     const avatarChangeIntent = !session.isGroup
         ? findUserAvatarChangeIntent(historyForPrompt, session.id, character.id)
         : null;
-    // 当前状态只用一条直白提示兜底；具体拉黑/解除事件本身已作为 system 消息进入历史。
+    // 当前状态只用一条直白提示兜底；具体拉黑/解除事件已直接写入角色长期记忆。
     if (!session.isGroup && session.isBlacklisted) {
         llmMessages.push({
             role: "system",
