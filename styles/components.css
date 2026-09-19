@@ -5231,62 +5231,92 @@
   color: var(--c-text);
 }
 
-/* ── Memory Timeline ── */
-
-/* 顶部来源标签是独立筛选条；记忆事件仍由页面本身纵向滚动。 */
-.mem-tl-tag-bar {
-  position: sticky;
-  top: 0;
-  z-index: 9;
+.memory-header-actions {
   display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 10px 0 8px;
-  margin-bottom: 4px;
-  touch-action: pan-x pan-y;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  background: color-mix(in srgb, var(--c-page-body-bg) 94%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  align-items: center;
 }
 
-.mem-tl-tag-bar::-webkit-scrollbar {
-  display: none;
+.mem-detail .page-header-content {
+  position: relative;
 }
 
-.mem-tl-tag-chip {
-  flex: 0 0 auto;
+.mem-detail .page-header-right {
+  position: absolute;
+  right: 14px;
+}
+
+.memory-header-filter-btn {
+  position: relative;
+}
+
+.memory-header-filter-badge {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 13px;
-  border: 1px solid var(--c-panel-border);
-  border-radius: 999px;
-  background: var(--c-panel);
-  color: var(--c-icon);
-  font-size: calc(11.5px*var(--app-text-scale,1));
-  font-weight: 500;
-  line-height: 1.2;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
-}
-
-.mem-tl-tag-chip[data-active] {
-  background: color-mix(in srgb, var(--c-icon-active) 14%, var(--c-panel));
-  border-color: color-mix(in srgb, var(--c-icon-active) 45%, transparent);
-  color: var(--c-icon-active);
-  font-weight: 600;
-}
-
-.mem-tl-tag-count {
-  font-size: calc(10px*var(--app-text-scale,1));
+  justify-content: center;
+  background: var(--c-icon-active);
+  color: #fff;
+  font-size: calc(9px*var(--app-text-scale,1));
   font-variant-numeric: tabular-nums;
-  opacity: 0.72;
+  line-height: 1;
 }
+
+.memory-timeline-filter-sheet .modal-header {
+  border-bottom: none;
+}
+
+.memory-timeline-filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.memory-timeline-filter-option {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--c-input);
+  color: var(--c-text-title);
+  font-size: calc(13px*var(--app-text-scale,1));
+  cursor: pointer;
+}
+
+.memory-timeline-filter-option[data-selected] {
+  border-color: color-mix(in srgb, var(--c-icon-active) 35%, transparent);
+  background: color-mix(in srgb, var(--c-icon-active) 10%, var(--c-panel));
+  color: var(--c-icon-active);
+}
+
+.memory-timeline-filter-option-meta {
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: inherit;
+  opacity: 0.78;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-timeline-filter-empty {
+  margin: 18px 0;
+  color: var(--c-text);
+  text-align: center;
+  font-size: calc(12px*var(--app-text-scale,1));
+}
+
+/* ── Memory Timeline ── */
 
 .mem-tl {
   position: relative;

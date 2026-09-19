@@ -1965,17 +1965,11 @@ export async function buildChatPromptMessages(
     const avatarChangeIntent = !session.isGroup
         ? findUserAvatarChangeIntent(historyForPrompt, session.id, character.id)
         : null;
-    // 仿真拉黑：用户已把角色拉黑——角色知情，知道自己发出的消息会被用户拒收
+    // 当前状态只用一条直白提示兜底；具体拉黑/解除事件本身已作为 system 消息进入历史。
     if (!session.isGroup && session.isBlacklisted) {
         llmMessages.push({
             role: "system",
-            content: [
-                "【被拉黑状态】用户已经在私聊里把你拉黑了，你清楚地知道这件事，本轮回复必须体现这一点，绝不能当作无事发生。",
-                "你现在发出去的每条消息都会被用户拒收：你的消息会显示红色感叹号和「消息已发出，但被对方拒收了」。消息内容用户其实仍然能看到（它们会正常出现在对话里），但你知道对方拒收了你的消息；聊天记录里你此前带「被对方拒收了」标注的消息就是证据。",
-                "用户发来的消息你依然能正常收到并看到。",
-                "请按你的人设对被拉黑这件事做出真实反应：可以愤怒、质问、伤心、阴阳怪气、连续轰炸式追问，也可以嘴硬装作不在意，或尝试道歉求和——明知消息被拒收仍忍不住继续发，也是一种真实反应。",
-                "除非用户解除拉黑并给出让你信服的理由，不要轻易当无事发生；保持在戏里，不要提及任何系统或仿真设定。",
-            ].join("\n"),
+            content: `当前会话状态：${character.name}已被${userIdentity?.name || "用户"}拉黑，${character.name}知道自己发出的消息会被拒收。`,
         });
     }
     if (avatarChangeIntent) {

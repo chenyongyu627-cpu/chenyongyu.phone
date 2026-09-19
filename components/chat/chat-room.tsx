@@ -1343,6 +1343,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [editingResponseRoundId, setEditingResponseRoundId] = useState<string | null>(null);
     const [editingResponseContent, setEditingResponseContent] = useState("");
     const [expandedVoiceCallIds, setExpandedVoiceCallIds] = useState<Set<string>>(new Set());
+    const [expandedBlacklistEventIds, setExpandedBlacklistEventIds] = useState<Set<string>>(new Set());
     const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(false);
     const INITIAL_LOAD = CHAT_INITIAL_VISIBLE_MESSAGE_COUNT;
@@ -3945,7 +3946,6 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 characterId?: string;
                 handled?: boolean;
                 busy?: boolean;
-                interruptCurrent?: boolean;
             }>).detail;
             const requestSessionId = typeof detail?.sessionId === "string" ? detail.sessionId : "";
             const requestCharacterId = typeof detail?.characterId === "string" ? detail.characterId : "";
@@ -3956,23 +3956,6 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 
             if (detail) detail.handled = true;
             syncMessagesFromStorage();
-            // 拉黑/解除拉黑属于会话状态切换，旧请求即使完成也只会基于旧状态回答。
-            // 立即中止旧轮并用最新落库状态重启，避免在慢 API 后面再排一整轮。
-            if (detail?.interruptCurrent && activeGenerationRuns.has(session.id)) {
-                cancelGenerationRun(session.id);
-                if (streamParseFrameRef.current) {
-                    cancelAnimationFrame(streamParseFrameRef.current);
-                    streamParseFrameRef.current = 0;
-                }
-                streamAccumRef.current = "";
-                setStreamPreview(null);
-                pendingReplyRequestRef.current = false;
-                isGeneratingRef.current = false;
-                setIsGenerating(false);
-                clearGenerationLock(session.id);
-                void triggerAIResponse();
-                return;
-            }
             // 真在生成中：如实告知调用方（避免记成「已生成回应」）。
             // 注意：pendingGenerate 兜底只在「最后一条是用户消息」时才会补触发（见 finally 块），
             // 拉黑/解除拉黑等系统事件触发的回复请求最后一条是 role:"system"，走不到那条兜底——
@@ -5880,6 +5863,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     const selectableStoredId = getSelectableStoredMessageId(msg);
                     const isMultiSelectable = isMultiSelectMode && !!selectableStoredId && !hiddenEmpty;
                     const isMultiSelected = !!selectableStoredId && selectedMessageIds.has(selectableStoredId);
+                    const blacklistEvent = msg.mediaData?.blacklistEvent;
+                    const isBlacklistEventExpanded = Boolean(blacklistEvent && expandedBlacklistEventIds.has(msg.id));
                     const multiSelectWrapperProps = isMultiSelectable ? {
                         onClickCapture: (e: React.MouseEvent) => {
                             e.preventDefault();
@@ -5933,7 +5918,18 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                 {uiRole(msg) === "system" ? (
                                     <div
                                         onPointerDown={(e) => { e.stopPropagation(); handleMessagePointerDown(e, msg.id); }}
-                                        onPointerUp={(e) => handleMessagePointerUp(e)}
+                                        onPointerUp={(e) => {
+                                            const wasLongPress = longPressTriggeredRef.current;
+                                            handleMessagePointerUp(e);
+                                            if (blacklistEvent && !wasLongPress) {
+                                                setExpandedBlacklistEventIds(prev => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(msg.id)) next.delete(msg.id);
+                                                    else next.add(msg.id);
+                                                    return next;
+                                                });
+                                            }
+                                        }}
                                         onPointerCancel={handleMessagePointerCancel}
                                         onPointerLeave={handleMessagePointerCancel}
                                         onPointerMove={(e) => {
@@ -5946,7 +5942,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                         onContextMenu={(e) => { e.preventDefault(); openMessageContextMenu(msg.id, { x: e.clientX, y: e.clientY }); }}
                                         className={isSystemInstruction
                                             ? "chat-system-instruction-card relative cursor-pointer"
-                                            : `chat-sys-msg break-all max-w-[90%] relative cursor-pointer${
+                                            : `chat-sys-msg break-all max-w-[90%] relative cursor-pointer${blacklistEvent ? " chat-blacklist-event" : ""}${
                                                 // 骰子旁白：等骰子落定再淡入，避免剧透点数
                                                 msg.content.startsWith("🎲 掷出了") && Date.now() - new Date(msg.createdAt).getTime() < 6000
                                                     ? " dice-aside-reveal"
@@ -5962,6 +5958,22 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                 onApprove={handleApproveMemoryWrite}
                                                 onIgnore={handleIgnoreMemoryWrite}
                                             />
+                                        ) : blacklistEvent ? (
+                                            <div className="chat-blacklist-event-content">
+                                                <span className="chat-blacklist-event-summary">
+                                                    {blacklistEvent === "block"
+                                                        ? `${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}被你拉黑了`
+                                                        : `你解除了对${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}的拉黑`}
+                                                </span>
+                                                {isBlacklistEventExpanded && (
+                                                    <span className="chat-blacklist-event-detail">
+                                                        <span>时间：{formatChatUiTime(msg.createdAt)}</span>
+                                                        <span>{blacklistEvent === "block"
+                                                            ? `${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}被${msg.mediaData?.blacklistUserName || userIdentity?.name || "用户"}拉黑了`
+                                                            : `${msg.mediaData?.blacklistUserName || userIdentity?.name || "用户"}解除了对${msg.mediaData?.blacklistCharacterName || character?.name || "对方"}的拉黑`}</span>
+                                                    </span>
+                                                )}
+                                            </div>
                                         ) : (
                                             <>
                                                 {msg.mediaType === "poke"

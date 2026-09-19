@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import {
     CHAT_INITIAL_VISIBLE_MESSAGE_COUNT,
     CHAT_LOAD_MORE_MESSAGE_COUNT,
-    CHAT_REQUEST_REPLY_EVENT,
     ChatSession,
     clearChatSessionMessages,
     clearChatSessionToolHistory,
@@ -745,7 +744,8 @@ export function ChatSettingsPanel({
         }
     };
 
-    // 仿真拉黑：开关落库 + 记录系统事件（进短期记忆）+ 请求一轮角色知情反应
+    // 仿真拉黑：开关只落库并插入一条会话事件。
+    // 不再额外请求 AI；事件会像通话记录一样进入后续正常聊天的上下文。
     const handleToggleBlacklist = (blocked: boolean) => {
         setIsBlacklisted(blocked);
         updateSession({ isBlacklisted: blocked });
@@ -755,15 +755,14 @@ export function ChatSettingsPanel({
             sessionId: session.id,
             role: "system",
             content: blocked
-                ? `${userLabel}把${charLabel}拉黑了，${charLabel}发出去的消息都会被${userLabel}拒收`
-                : `${userLabel}解除了对${charLabel}的拉黑，${charLabel}的消息恢复正常送达`,
-            // 标记事件类型：提示词组装时豁免「空生成续写压制」，保证角色必须对此事件作出反应
-            mediaData: { blacklistEvent: blocked ? "block" : "unblock" },
+                ? `${charLabel}被${userLabel}拉黑了`
+                : `${userLabel}解除了对${charLabel}的拉黑`,
+            mediaData: {
+                blacklistEvent: blocked ? "block" : "unblock",
+                blacklistCharacterName: charLabel,
+                blacklistUserName: userLabel,
+            },
         });
-        // 让角色「知道」并做出反应：走聊天室完整生成管线（聊天页未挂载时由桌面壳兜底）
-        window.dispatchEvent(new CustomEvent(CHAT_REQUEST_REPLY_EVENT, {
-            detail: { sessionId: session.id, interruptCurrent: true },
-        }));
     };
 
     const handleClearHistory = () => {

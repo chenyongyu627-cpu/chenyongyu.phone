@@ -1192,6 +1192,30 @@
   overflow: visible;
 }
 
+.chat-blacklist-event {
+  max-width: min(90%, 360px);
+  white-space: normal;
+  text-align: center;
+}
+.chat-blacklist-event-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chat-blacklist-event-summary {
+  display: block;
+}
+.chat-blacklist-event-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--c-text) 16%, transparent);
+  text-align: left;
+  line-height: 1.55;
+  white-space: normal;
+}
+
 /* ── 仿真拉黑：角色消息被拒收的仿微信红色感叹号 + 拒收提示灰字 ── */
 .chat-msg-rejected-mark {
   flex: 0 0 auto;
