@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeftIcon, PhotoIcon, PlusIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { Maximize2, Play, Download, Upload } from "lucide-react";
-import { Avatar } from "@/components/ui/primitives";
 import { TextExpandModal } from "@/components/ui/modal";
 import { CustomStatusFrame } from "@/components/chat/custom-status-frame";
+import { StoryPaginationManager, type StoryBranchCreateInput } from "@/components/story/story-pagination-manager";
 import { downloadFile } from "@/lib/download-utils";
 import type { Character } from "@/lib/character-types";
 import type { PresetConfig } from "@/lib/settings-types";
-import type { StoryCharacterSettings, StoryProseStyleScheme, StoryQuickInputScheme, StorySchemeRepository, StoryTailScheme, StoryUiPrefs } from "@/lib/story-storage";
+import type { StoryCharacterSettings, StoryGroup, StoryProseStyleScheme, StoryQuickInputScheme, StorySchemeRepository, StorySession, StoryTailScheme, StoryUiPrefs } from "@/lib/story-storage";
 import {
   STORY_DEFAULT_STATUS_RENDER,
   STORY_DEFAULT_THEATER_RENDER,
@@ -22,6 +22,10 @@ export { STORY_DEFAULT_STATUS_RENDER, STORY_DEFAULT_THEATER_RENDER };
 type StorySettingsPageProps = {
   characters: Character[];
   activeCharacterId: string;
+  activeGroupId: string;
+  groups: StoryGroup[];
+  ownerSessions: StorySession[];
+  activeSessionId: string;
   userName: string;
   uiPrefs: StoryUiPrefs;
   settings: StoryCharacterSettings;
@@ -32,6 +36,14 @@ type StorySettingsPageProps = {
   contextExcludedTags: string;
   onClose: () => void;
   onCharacterChange: (characterId: string) => void;
+  onGroupSelect: (groupId: string) => void;
+  onGroupCreate: (characterIds: string[], name: string) => void;
+  onGroupRename: (groupId: string, name: string) => void;
+  onGroupDelete: (groupId: string) => void;
+  onSessionSelect: (sessionId: string) => void;
+  onBranchCreate: (input: StoryBranchCreateInput) => void;
+  onBranchDelete: (sessionIds: string[]) => void;
+  onSessionUpdate: (sessionId: string, updates: Partial<StorySession>) => void;
   onUiPrefsChange: (prefs: StoryUiPrefs) => void;
   onSettingsChange: (settings: StoryCharacterSettings) => void;
   /** 编辑公用仓库里的方案定义（新增/删除/改名/改内容都在这里落盘）。 */
@@ -485,16 +497,24 @@ export function StorySettingsPage(props: StorySettingsPageProps) {
         <button type="button" onClick={props.onClose} aria-label="关闭设置"><XMarkIcon width={17} /></button>
       </header>
       <main className="story-settings-scroll">
-        <SettingCard title="选择见面对象" hint="预设与方案启用选择按角色保存；方案内容统一存于公用仓库">
-          <div className="story-meeting-characters">
-            {props.characters.map((character) => (
-              <button key={character.id} type="button" data-active={character.id === props.activeCharacterId ? "true" : undefined} onClick={() => props.onCharacterChange(character.id)}>
-                <Avatar src={character.avatar || undefined} name={character.name} size="lg" />
-                <span>{character.name}</span>
-              </button>
-            ))}
-          </div>
-        </SettingCard>
+        <StoryPaginationManager
+          characters={props.characters}
+          activeCharacterId={props.activeCharacterId}
+          activeGroupId={props.activeGroupId}
+          groups={props.groups}
+          sessions={props.ownerSessions}
+          activeSessionId={props.activeSessionId}
+          userName={props.userName}
+          onCharacterChange={props.onCharacterChange}
+          onGroupSelect={props.onGroupSelect}
+          onGroupCreate={props.onGroupCreate}
+          onGroupRename={props.onGroupRename}
+          onGroupDelete={props.onGroupDelete}
+          onSessionSelect={props.onSessionSelect}
+          onBranchCreate={props.onBranchCreate}
+          onBranchDelete={props.onBranchDelete}
+          onSessionUpdate={props.onSessionUpdate}
+        />
 
         <SettingCard title="剧情预设设置" hint="建议给剧情 APP 单独制作专属预设，避免影响其他应用">
           <label className="story-settings-field"><span>当前角色专属预设名称</span><input value={normalized.presetName} onChange={(event) => patchSettings({ presetName: event.target.value })} /></label>
