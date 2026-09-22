@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, RefreshCw, Trash2, Wand2, X } from "lucide-react";
+import { ChevronLeft, RefreshCw, Trash2, Wand2, X, Plus } from "lucide-react";
 import type { Character } from "@/lib/character-types";
 import { loadCharacters } from "@/lib/character-storage";
 import type { DwellingLayout, DwellingRoom, DwellingFurniture, DwellingFurnitureItem } from "@/lib/dwelling-storage";
@@ -15,7 +15,7 @@ import {
     saveDwellingImageEnabled,
     collectRoomImageRefs,
 } from "@/lib/dwelling-storage";
-import { generateDwellingLayout, generateItemHtml, type DwellingRefreshMode } from "@/lib/dwelling-engine";
+import { generateDwellingLayout, generateItemHtml, generateDwellingSingleRoom, type DwellingRefreshMode } from "@/lib/dwelling-engine";
 import { pinyin } from "pinyin-pro";
 import { getDwellingImageAvailability, generateDwellingRoomImage, cancelDwellingRoomImage } from "@/lib/dwelling-image";
 import { deleteMediaRef, loadMediaObjectUrl } from "@/lib/media-cache-storage";
@@ -87,6 +87,9 @@ export function DwellingApp({ onClose, visible, onIdle }: DwellingAppProps) {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showRefreshConfirm, setShowRefreshConfirm] = useState(false);
     const [itemDetail, setItemDetail] = useState<ItemDetail | null>(null);
+    const [showAddRoomModal, setShowAddRoomModal] = useState(false);
+    const [newRoomNameInput, setNewRoomNameInput] = useState("");
+    const [isCreatingRoom, setIsCreatingRoom] = useState(false);
     const [imageEnabled, setImageEnabled] = useState(true);
     const [imageConfigured, setImageConfigured] = useState(false);
     const activeCharIdRef = useRef<string | null>(null);
@@ -222,6 +225,41 @@ export function DwellingApp({ onClose, visible, onIdle }: DwellingAppProps) {
         cs.error = null;
         cs.imageErrors = {};
         setActiveRoomIdx(0);
+        setItemDetail(null);
+        rerender();
+    }
+
+    // ── 创建新房间（不清除已有房间） ──
+    async function handleCreateRoom(roomName: string) {
+        if (!activeCharId) return;
+        const name = roomName.trim();
+        if (!name) return;
+        const cs = getCharState(activeCharId);
+        if (cs.isGenerating || isCreatingRoom) return;
+
+        setIsCreatingRoom(true);
+        setShowAddRoomModal(false);
+        setNewRoomNameInput("");
+        cs.isGenerating = true;
+        cs.error = null;
+        rerender();
+
+        const { room: newRoom, error } = await generateDwellingSingleRoom(activeCharId, name);
+        setIsCreatingRoom(false);
+        cs.isGenerating = false;
+
+        if (!newRoom) {
+            cs.error = error || "创建房间失败";
+            rerender();
+            return;
+        }
+
+        // Append new room without wiping existing layout
+        const layout = cs.layout ? structuredClone(cs.layout) : { rooms: [] };
+        layout.rooms.push(newRoom);
+        cs.layout = layout;
+        await saveDwellingLayout(activeCharId, layout);
+        setActiveRoomIdx(layout.rooms.length - 1);
         setItemDetail(null);
         rerender();
     }
@@ -404,6 +442,9 @@ export function DwellingApp({ onClose, visible, onIdle }: DwellingAppProps) {
                         </button>
                     ))}
                     <div className="dw-tabs-actions">
+                        <button className="dw-tab-action" onClick={() => { setNewRoomNameInput(""); setShowAddRoomModal(true); }} disabled={cs.isGenerating} title="新建房间">
+                            <Plus size={14} />
+                        </button>
                         <button className="dw-tab-action" onClick={() => setShowRefreshConfirm(true)} disabled={cs.isGenerating} title="重新生成">
                             <RefreshCw size={13} />
                         </button>
@@ -481,6 +522,54 @@ export function DwellingApp({ onClose, visible, onIdle }: DwellingAppProps) {
                     </div>
                 </div>
             )}
+            {/* Add Room Modal */}
+            {showAddRoomModal && (
+                <div className="dw-confirm-overlay">
+                    <div className="dw-confirm-shade" onClick={() => setShowAddRoomModal(false)} />
+                    <div className="dw-confirm-card">
+                        <div className="dw-confirm-title">新建房间</div>
+                        <div className="dw-confirm-msg">输入新房间的名字，AI 将自动构想对应家具与物品</div>
+                        <div style={{ marginTop: 14 }}>
+                            <input
+                                type="text"
+                                className="dw-input"
+                                placeholder="例如：阳光书房、茶室、猫咪庭院"
+                                value={newRoomNameInput}
+                                onChange={e => setNewRoomNameInput(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === "Enter" && newRoomNameInput.trim()) {
+                                        void handleCreateRoom(newRoomNameInput);
+                                    }
+                                }}
+                                autoFocus
+                                style={{
+                                    width: "100%",
+                                    boxSizing: "border-box",
+                                    padding: "8px 12px",
+                                    background: "rgba(255, 255, 255, 0.05)",
+                                    border: "1px solid var(--dw-line)",
+                                    color: "var(--dw-ink)",
+                                    fontFamily: "var(--dw-serif)",
+                                    fontSize: "13px",
+                                    outline: "none",
+                                }}
+                            />
+                        </div>
+                        <div className="dw-confirm-actions">
+                            <button className="dw-confirm-btn dw-confirm-btn-cancel" onClick={() => setShowAddRoomModal(false)}>取消</button>
+                            <button
+                                className="dw-confirm-btn"
+                                disabled={!newRoomNameInput.trim()}
+                                style={{ opacity: newRoomNameInput.trim() ? 1 : 0.5 }}
+                                onClick={() => void handleCreateRoom(newRoomNameInput)}
+                            >
+                                构想生成
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Refresh confirm dialog */}
             {showRefreshConfirm && (
                 <div className="dw-confirm-overlay">

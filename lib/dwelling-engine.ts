@@ -295,6 +295,76 @@ export async function generateDwellingLayout(
     }
 }
 
+// ── Generate a single new room ──
+
+export async function generateDwellingSingleRoom(
+    characterId: string,
+    roomName: string,
+): Promise<{ room: DwellingRoom | null; error?: string }> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) return { room: null, error: "未找到可用的 API 配置" };
+
+    const oldCached = await loadDwellingLayout(characterId);
+    const dwellingContext = oldCached ? formatDwellingContext(oldCached.layout, oldCached.updatedAt) : undefined;
+
+    const appTags = ["dwelling", "full"];
+
+    try {
+        const llmMessages = await buildDwellingMessages(
+            characterId, preset, worldBooks, regexes, appTags,
+            dwellingContext,
+            { dwellingRoom: roomName }
+        );
+
+        // Append explicit directive to generate only this single room
+        llmMessages.push({
+            role: "user",
+            content: `请为角色创建且仅创建一个名为「${roomName}」的新房间。请以 JSON 格式输出该房间的数据，包含 id、name（须为"${roomName}"）、en（英文名大写）、description（房间描述与氛围引言）、imagePrompt（该房间室内空间摄影英文/中文提示词，必须明确房间内所有家具分布，低照度暗调质感，无人物）、以及 furniture 数组（3-5件家具，每件包含 id, label, icon, en, position, items 数组）。\n输出示例格式：\n{\n  "id": "room_${Date.now().toString(36)}",\n  "name": "${roomName}",\n  "en": "...",\n  "description": "...",\n  "imagePrompt": "...",\n  "furniture": [\n    {\n      "id": "f1",\n      "label": "...",\n      "icon": "...",\n      "en": "...",\n      "position": "center",\n      "items": [\n        { "id": "i1", "name": "...", "preview": "..." }\n      ]\n    }\n  ]\n}\n请直接输出 JSON，不要任何多余解释。`,
+        });
+
+        const rawOutput = await sendLLMRequest(apiConfig, preset, llmMessages, regexes, {
+            characterName: loadCharacters().find(c => c.id === characterId)?.name,
+        }, {
+            appId: "dwelling",
+            appTags,
+        });
+
+        if (!rawOutput) return { room: null, error: "LLM 返回为空" };
+
+        const parsed = extractJSON(rawOutput);
+        if (!parsed || typeof parsed !== "object") {
+            return { room: null, error: "无法解析 LLM 返回的 JSON" };
+        }
+
+        let roomObj: DwellingRoom | null = null;
+        const obj = parsed as Record<string, unknown>;
+        if (Array.isArray(obj.rooms) && obj.rooms.length > 0) {
+            roomObj = obj.rooms[0] as DwellingRoom;
+        } else if (typeof obj.name === "string" && Array.isArray(obj.furniture)) {
+            roomObj = obj as unknown as DwellingRoom;
+        }
+
+        if (!roomObj || !roomObj.name) {
+            return { room: null, error: "LLM 未返回有效的新房间数据" };
+        }
+
+        roomObj.name = roomName; // Ensure user-given name
+        if (!roomObj.id) roomObj.id = `room_${Date.now().toString(36)}`;
+        if (!Array.isArray(roomObj.furniture)) roomObj.furniture = [];
+        for (const f of roomObj.furniture) {
+            if (!Array.isArray(f.items)) f.items = [];
+        }
+
+        deduplicatePositions([roomObj]);
+        sanitizeLayoutExtras([roomObj]);
+
+        return { room: roomObj };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : "生成失败";
+        return { room: null, error: msg };
+    }
+}
+
 // ── Generate HTML for a single item ──
 
 export async function generateItemHtml(
