@@ -19,6 +19,9 @@ import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { buildCalendarScheduleMarker } from "./calendar-storage";
 import { getWeekStartIso } from "./calendar-utils";
+import { saveMemoryEntry } from "./memory-storage";
+import type { MemoryEntry } from "./memory-types";
+import { getCurrentSeason, getTodayWeather, SEASON_LABELS, WEATHER_LABELS, incrementInteractionCount, type DwellingCohabitation, type DwellingRandomEvent, type DwellingNote } from "./dwelling-storage";
 
 // ── Resolve configs (same pattern as story-engine) ──
 
@@ -434,4 +437,147 @@ export async function previewDwellingPromptPayload(
         model: apiConfig.defaultModel,
         presetName: preset?.name ?? "默认预设",
     };
+}
+
+// ══════ 同居系统引擎 ══════
+
+function envContext(): string {
+    const season = SEASON_LABELS[getCurrentSeason()]; const weather = WEATHER_LABELS[getTodayWeather()];
+    const h = new Date().getHours();
+    const period = h<6?"凌晨":h<9?"早晨":h<12?"上午":h<14?"中午":h<17?"下午":h<20?"傍晚":h<23?"夜晚":"深夜";
+    return `当前季节：${season}，天气：${weather}，时段：${period}`;
+}
+
+export async function recordDwellingInteractionMemory(characterId: string, content: string): Promise<void> {
+    try { const entry: MemoryEntry = { id: `dwell_${Date.now()}_${Math.random().toString(36).slice(2,7)}`, characterId, sourceApp: "dwelling", type: "long_term", content, importance: 0.8, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; await saveMemoryEntry(entry); } catch (err) { console.warn("[Dwelling] 写入记忆失败:", err); }
+}
+
+export async function requestCohabitationDecision(characterId: string, userMessage: string): Promise<{ agreed: boolean; reply: string }> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","cohabitation_request"]);
+    messages.push({ role: "user", content: `【系统判定】用户向你提出「同居」请求：\n"${userMessage}"\n${envContext()}\n\n以【${charName}】的身份与性格，结合过往关系慎重决定。严格只输出JSON：\n{"agreed":true/false,"reply":"角色的回复（含情绪神态动作，50-120字）"}` });
+    try { const raw = await sendLLMRequest(apiConfig, messages); const parsed = JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"")); return { agreed: Boolean(parsed.agreed), reply: String(parsed.reply || (parsed.agreed ? "好啊，以后一起生活吧。" : "现在…可能还太早了。")) }; }
+    catch (e) { console.error(e); return { agreed: false, reply: "（似乎在思考什么，暂时没有回答）" }; }
+}
+
+export async function performDwellingCharInteraction(characterId: string, roomName: string, kind: "touch"|"chat", userInput: string, moodLabel?: string): Promise<string> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","interaction",kind]);
+    const actionDesc = kind === "touch" ? `用户对你做了："${userInput}"` : `用户和你闲聊说："${userInput}"`;
+    const moodHint = moodLabel ? `\n角色当前情绪：${moodLabel}` : "";
+    messages.push({ role: "user", content: `【同居互动·${roomName}】${envContext()}${moodHint}\n${actionDesc}\n\n以【${charName}】的性格回复。包含环境、动作、神态描写。80-200字。` });
+    try { const reply = await sendLLMRequest(apiConfig, messages); void recordDwellingInteractionMemory(characterId, `在${roomName}，${kind==="touch"?"亲密互动":"闲聊"}（"${userInput}"），${charName}："${reply.trim().slice(0,80)}..."`);
+    return reply.trim(); } catch (e) { console.error(e); throw new Error("互动生成失败"); }
+}
+
+export async function performFurnitureUse(characterId: string, roomName: string, furnitureName: string, action: string, moodLabel?: string): Promise<string> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","furniture_use"]);
+    const moodHint = moodLabel ? `\n角色当前情绪：${moodLabel}` : "";
+    messages.push({ role: "user", content: `【家具使用·${roomName}·${furnitureName}】${envContext()}${moodHint}\n用户在【${furnitureName}】旁做了："${action}"\n\n以【${charName}】的口吻描写场景：用户使用家具的画面、角色反应。融入天气季节感官细节。80-150字。` });
+    try { const reply = await sendLLMRequest(apiConfig, messages); void recordDwellingInteractionMemory(characterId, `在${roomName}使用了${furnitureName}（${action}），${charName}：${reply.trim().slice(0,60)}...`); return reply.trim(); }
+    catch (e) { console.error(e); throw new Error("家具互动生成失败"); }
+}
+
+export async function performWelcomeHome(characterId: string, moodLabel?: string): Promise<string> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","welcome_home"]);
+    const moodHint = moodLabel ? `角色当前情绪：${moodLabel}。` : "";
+    messages.push({ role: "user", content: `【玄关迎接】${envContext()}\n${moodHint}用户刚到家，在玄关呼唤你。\n以【${charName}】的性格描写迎接场景。100-180字。` });
+    try { const reply = await sendLLMRequest(apiConfig, messages); void recordDwellingInteractionMemory(characterId, `回到家，${charName}到玄关迎接：${reply.trim().slice(0,60)}...`); return reply.trim(); }
+    catch (e) { console.error(e); throw new Error("迎接生成失败"); }
+}
+
+export async function generateNoteReply(characterId: string, userNote: string, moodLabel?: string): Promise<string> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","fridge_note"]);
+    const moodHint = moodLabel ? `当前情绪：${moodLabel}。` : "";
+    messages.push({ role: "user", content: `【冰箱便签】用户贴了便签：\n"${userNote}"\n${moodHint}${envContext()}\n以【${charName}】的字迹风格回复。10-60字。` });
+    try { return (await sendLLMRequest(apiConfig, messages)).trim(); } catch (e) { console.error(e); throw new Error("便签回复生成失败"); }
+}
+
+export async function generateAnniversaryScene(characterId: string, days: number, moodLabel?: string): Promise<string> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","anniversary"]);
+    const moodHint = moodLabel ? `当前情绪：${moodLabel}。` : "";
+    messages.push({ role: "user", content: `【同居纪念日】今天是同居第 ${days} 天！${envContext()}\n${moodHint}以【${charName}】的性格描写 TA 为这个日子做了什么。120-200字。` });
+    try { const reply = await sendLLMRequest(apiConfig, messages); void recordDwellingInteractionMemory(characterId, `同居第${days}天纪念日，${charName}：${reply.trim().slice(0,80)}...`); return reply.trim(); }
+    catch (e) { console.error(e); throw new Error("纪念日场景生成失败"); }
+}
+
+export async function generateRandomEventScene(characterId: string, event: DwellingRandomEvent, moodLabel?: string): Promise<string> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","random_event"]);
+    const moodHint = moodLabel ? `当前情绪：${moodLabel}。` : "";
+    const isIntimate = ["intimate","bath_together"].includes(event.id);
+    const intimateHint = isIntimate ? "\n（可以包含暧昧、身体接触、感官描写，保持文学质感）" : "";
+    messages.push({ role: "user", content: `【随机事件：${event.name}】${envContext()}\n${moodHint}场景：${event.description}${intimateHint}\n以【${charName}】的性格描写完整场景。150-250字。` });
+    try { const reply = await sendLLMRequest(apiConfig, messages); void recordDwellingInteractionMemory(characterId, `发生了「${event.name}」：${reply.trim().slice(0,80)}...`); return reply.trim(); }
+    catch (e) { console.error(e); throw new Error("事件场景生成失败"); }
+}
+
+// ── 厨房烹饪 ──
+export type CookingIngredient = { name: string; icon: string; isKey: boolean };
+export type CookingRecipe = { name: string; allIngredients: CookingIngredient[]; keyCount: number; steps: string[]; result: string; charReaction: string; };
+export type CookingResult = { score: number; comment: string; dishDesc: string };
+
+export async function generateCookingSession(characterId: string, dishRequest?: string): Promise<CookingRecipe> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","cooking"]);
+    const dishHint = dishRequest ? `用户点了："${dishRequest}"` : "用户没指定，随机选一道符合角色口味的菜";
+    messages.push({ role: "user", content: `【厨房烹饪】${envContext()}\n${dishHint}\n以【${charName}】的性格策划。严格只输出JSON：\n{"name":"菜名","allIngredients":[{"name":"食材","icon":"emoji","isKey":true/false}],"keyCount":数字,"steps":["步骤1（带角色动作，30字内）","步骤2","步骤3","步骤4"],"result":"成品描述（40字内）","charReaction":"角色反应（50字内）"}\nallIngredients恰好6种，isKey=true的3-4种是正确食材。步骤4步。` });
+    try { const raw = await sendLLMRequest(apiConfig, messages); const parsed = JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"")) as CookingRecipe; parsed.keyCount = parsed.allIngredients.filter(i => i.isKey).length; return parsed; }
+    catch (e) { console.error(e); throw new Error("菜谱生成失败"); }
+}
+
+export function scoreCooking(recipe: CookingRecipe, selectedNames: string[]): CookingResult {
+    const keyNames = recipe.allIngredients.filter(i => i.isKey).map(i => i.name);
+    const correct = selectedNames.filter(n => keyNames.includes(n)).length;
+    const wrong = selectedNames.filter(n => !keyNames.includes(n)).length;
+    const score = Math.max(0, Math.round((correct / recipe.keyCount) * 100 - wrong * 15));
+    let comment: string;
+    if (score >= 90) comment = "完美！食材选得恰到好处。"; else if (score >= 70) comment = "不错，味道很好。"; else if (score >= 40) comment = "味道有点奇怪…勉强能吃。"; else comment = "这组合有点灾难…重在参与吧。";
+    return { score, comment, dishDesc: recipe.result };
+}
+
+// ── 客厅电视 ──
+export type TvChannel = { channelName: string; program: string; scene: string; imagePrompt: string; charComment: string };
+
+export async function generateTvChannel(characterId: string, genre: string): Promise<TvChannel> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","tv"]);
+    messages.push({ role: "user", content: `【客厅看电视】${envContext()}\n用户调到「${genre}」频道。以【${charName}】的世界观想象画面。严格只输出JSON：\n{"channelName":"频道名","program":"节目名","scene":"画面描写（60字内）","imagePrompt":"英文画面描述（50词内）","charComment":"角色反应（50字内）"}` });
+    try { const raw = await sendLLMRequest(apiConfig, messages); const parsed = JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"")) as TvChannel; void recordDwellingInteractionMemory(characterId, `看了「${parsed.channelName}」的「${parsed.program}」，${charName}：${parsed.charComment}`); return parsed; }
+    catch (e) { console.error(e); throw new Error("频道生成失败"); }
+}
+
+// ── 书房书籍 ──
+export type BookOverview = { title: string; author: string; genre: string; pages: string[]; charThought: string };
+
+export async function generateBookOverview(characterId: string): Promise<BookOverview> {
+    const { apiConfig, preset, worldBooks, regexes } = resolveDwellingConfigs(characterId);
+    if (!apiConfig) throw new Error("未配置可用模型 API");
+    const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
+    const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","book"]);
+    messages.push({ role: "user", content: `【书房阅读】${envContext()}\n随手抽一本【${charName}】收藏的书。严格只输出JSON：\n{"title":"书名","author":"作者","genre":"类型","pages":["第1页（80-120字）","第2页","第3页","第4页","第5页"],"charThought":"角色批注（50字内）"}\n5页连贯正文。` });
+    try { const raw = await sendLLMRequest(apiConfig, messages); const parsed = JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"")) as BookOverview; void recordDwellingInteractionMemory(characterId, `翻阅了《${parsed.title}》，${charName}批注：${parsed.charThought}`); return parsed; }
+    catch (e) { console.error(e); throw new Error("书籍生成失败"); }
 }

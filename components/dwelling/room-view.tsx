@@ -24,6 +24,15 @@ type RoomViewProps = {
     onToggleImage: () => void;
     onRetryImage: () => void;
     onCancelImage: () => void;
+    cohabitChar?: { id: string; name: string; avatar?: string; activity?: string; isHere: boolean } | null;
+    onInteractChar?: () => void;
+    roomMinigame?: "cooking" | "tv" | "book" | null;
+    onMinigame?: () => void;
+    cohabitEnabled?: boolean;
+    onFurnitureUse?: (furnitureName: string) => void;
+    moodLabel?: string;
+    weatherLabel?: string;
+    seasonLabel?: string;
 };
 
 /** 与 dwelling-engine 的 clamp 范围保持一致：避开顶部玻璃栏区和底部引言区 */
@@ -47,6 +56,8 @@ export function RoomView({
     onExploreItem, onOpenItem, onMoveMarker,
     imageUrl, imageStatus, imageError, imageEnabled, imageConfigured,
     onToggleImage, onRetryImage, onCancelImage,
+    cohabitChar, onInteractChar, roomMinigame, onMinigame,
+    cohabitEnabled, onFurnitureUse, moodLabel, weatherLabel, seasonLabel,
 }: RoomViewProps) {
     const [viewMode, setViewMode] = useState<"stage" | "list">("stage");
     const [sheetFurnitureId, setSheetFurnitureId] = useState<string | null>(null);
@@ -383,6 +394,7 @@ export function RoomView({
                             <span className="dw2-sh-cnt">{sheetFurniture.items.length} 件物品</span>
                         </div>
                         <div className="dw2-shline" />
+                        {cohabitEnabled && onFurnitureUse && <button className="dw2-furniture-use-btn" onClick={() => { setSheetFurnitureId(null); onFurnitureUse(sheetFurniture.label); }}>✦ 使用{sheetFurniture.label}</button>}
                         {sheetFurniture.items.map((item, idx) => {
                             const key = ikey(room.id, item.id);
                             const html = itemHtmlCache[key];

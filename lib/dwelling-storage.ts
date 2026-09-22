@@ -40,9 +40,111 @@ export type DwellingRoom = {
     furniture: DwellingFurniture[];
 };
 
-export type DwellingLayout = {
-    rooms: DwellingRoom[];
+// ── 情绪系统 ──
+export type DwellingMood = "happy" | "calm" | "sleepy" | "annoyed" | "shy" | "excited" | "melancholy";
+export type DwellingMoodState = { mood: DwellingMood; intensity: number; updatedAt: number; recentInteractions: number; };
+
+// ── 冰箱便签 ──
+export type DwellingNote = { id: string; from: "user" | "char"; content: string; createdAt: string; charReply?: string; charRepliedAt?: string; };
+
+// ── 季节 & 天气 ──
+export type DwellingSeason = "spring" | "summer" | "autumn" | "winter";
+export type DwellingWeather = "sunny" | "cloudy" | "rainy" | "snowy" | "stormy" | "foggy";
+export function getCurrentSeason(): DwellingSeason { const m = new Date().getMonth(); if (m >= 2 && m <= 4) return "spring"; if (m >= 5 && m <= 7) return "summer"; if (m >= 8 && m <= 10) return "autumn"; return "winter"; }
+const WEATHER_POOL: Record<DwellingSeason, DwellingWeather[]> = { spring: ["sunny","cloudy","rainy","foggy","sunny","cloudy"], summer: ["sunny","sunny","cloudy","rainy","stormy","sunny"], autumn: ["cloudy","sunny","rainy","foggy","cloudy","sunny"], winter: ["cloudy","snowy","sunny","foggy","snowy","cloudy"] };
+export function getTodayWeather(): DwellingWeather { const d = new Date(); const seed = d.getFullYear() * 10000 + (d.getMonth()+1) * 100 + d.getDate(); const pool = WEATHER_POOL[getCurrentSeason()]; return pool[seed % pool.length]; }
+export const SEASON_LABELS: Record<DwellingSeason, string> = { spring: "春", summer: "夏", autumn: "秋", winter: "冬" };
+export const WEATHER_LABELS: Record<DwellingWeather, string> = { sunny: "☀ 晴", cloudy: "☁ 多云", rainy: "🌧 雨", snowy: "❄ 雪", stormy: "⛈ 暴雨", foggy: "🌫 雾" };
+
+// ── 纪念日 ──
+export function getCohabitDays(agreedAt?: string): number { if (!agreedAt) return 0; return Math.floor((Date.now() - new Date(agreedAt).getTime()) / 86400000); }
+export const ANNIVERSARY_MILESTONES = [1, 7, 30, 50, 100, 200, 365] as const;
+export function checkAnniversary(agreedAt?: string): number | null { const days = getCohabitDays(agreedAt); return ANNIVERSARY_MILESTONES.includes(days as any) ? days : null; }
+
+// ── 随机事件池 ──
+type TimeSlot = "dawn" | "morning" | "noon" | "afternoon" | "evening" | "night" | "latenight";
+export type DwellingRandomEvent = { id: string; name: string; description: string; weight: number; minDays: number; timeSlots?: TimeSlot[]; weather?: DwellingWeather[]; season?: DwellingSeason[]; };
+export const RANDOM_EVENT_POOL: DwellingRandomEvent[] = [
+    { id: "candlelight_dinner", name: "烛光晚餐", description: "角色提议今晚来一顿烛光晚餐，亲手布置了餐桌", weight: 0.12, minDays: 3, timeSlots: ["evening","night"] },
+    { id: "deep_talk", name: "深夜长谈", description: "夜深了，两人靠在沙发上聊起了心里话", weight: 0.15, minDays: 5, timeSlots: ["night","latenight"] },
+    { id: "intimate", name: "亲密时刻", description: "气氛变得暧昧，你们之间的距离越来越近…", weight: 0.08, minDays: 14, timeSlots: ["night","latenight"] },
+    { id: "rainy_cuddle", name: "雨天窝在一起", description: "外面下着雨，你们裹着毯子窝在沙发上", weight: 0.15, minDays: 2, weather: ["rainy","stormy"] },
+    { id: "morning_surprise", name: "早安惊喜", description: "你醒来时发现角色已经准备好了早餐", weight: 0.12, minDays: 3, timeSlots: ["dawn","morning"] },
+    { id: "snow_window", name: "窗边看雪", description: "窗外飘起了雪，角色喊你一起来看", weight: 0.18, minDays: 1, weather: ["snowy"] },
+    { id: "sudden_hug", name: "突然的拥抱", description: "角色从背后抱住了你，没有说话", weight: 0.1, minDays: 7 },
+    { id: "midnight_snack", name: "半夜觅食", description: "你们一起偷偷溜进厨房做了碗泡面", weight: 0.13, minDays: 3, timeSlots: ["latenight"] },
+    { id: "photo_together", name: "一起自拍", description: "角色突然掏出手机说要拍一张合照", weight: 0.1, minDays: 2 },
+    { id: "lazy_afternoon", name: "慵懒午后", description: "阳光从窗帘缝隙洒进来，你们都不想动", weight: 0.14, minDays: 1, timeSlots: ["afternoon"], weather: ["sunny"] },
+    { id: "bath_together", name: "一起泡澡", description: "角色问你要不要一起泡个澡放松一下", weight: 0.07, minDays: 21, timeSlots: ["night"] },
+    { id: "nightmare", name: "做了噩梦", description: "深夜角色被噩梦惊醒，靠近了你", weight: 0.08, minDays: 7, timeSlots: ["latenight"] },
+    { id: "dance", name: "客厅尬舞", description: "音乐响起来，角色拉着你在客厅跳了起来", weight: 0.06, minDays: 10, timeSlots: ["evening","night"] },
+    { id: "stargazing", name: "阳台看星星", description: "夜晚天空格外清澈，你们在阳台仰望星空", weight: 0.1, minDays: 5, timeSlots: ["night","latenight"], weather: ["sunny"] },
+    { id: "jealous_moment", name: "小小吃醋", description: "角色看了眼你的手机，撇了撇嘴", weight: 0.08, minDays: 14 },
+    { id: "fog_morning", name: "雾中散步", description: "清晨起了浓雾，角色想和你出门走走", weight: 0.1, minDays: 3, timeSlots: ["dawn","morning"], weather: ["foggy"] },
+];
+
+function getTimeSlot(): TimeSlot { const h = new Date().getHours(); if (h >= 5 && h < 7) return "dawn"; if (h >= 7 && h < 9) return "morning"; if (h >= 9 && h < 12) return "noon"; if (h >= 12 && h < 17) return "afternoon"; if (h >= 17 && h < 20) return "evening"; if (h >= 20 && h < 24) return "night"; return "latenight"; }
+
+export function rollRandomEvent(cohabitDays: number, triggerChance: number = 0.3): DwellingRandomEvent | null {
+    if (Math.random() > triggerChance) return null;
+    const slot = getTimeSlot(); const weather = getTodayWeather(); const season = getCurrentSeason();
+    const eligible = RANDOM_EVENT_POOL.filter(e => { if (cohabitDays < e.minDays) return false; if (e.timeSlots && !e.timeSlots.includes(slot)) return false; if (e.weather && !e.weather.includes(weather)) return false; if (e.season && !e.season.includes(season)) return false; return true; });
+    if (!eligible.length) return null;
+    const totalWeight = eligible.reduce((s, e) => s + e.weight, 0); let r = Math.random() * totalWeight;
+    for (const e of eligible) { r -= e.weight; if (r <= 0) return e; }
+    return eligible[eligible.length - 1];
+}
+
+// ── 同居状态 ──
+export type DwellingCohabitation = { enabled: boolean; agreedAt?: string; currentRoomId?: string; currentActivity?: string; lastActivityUpdate?: number; mood?: DwellingMoodState; notes?: DwellingNote[]; todayEventIds?: string[]; todayEventDate?: string; };
+
+export type DwellingLayout = { rooms: DwellingRoom[]; cohabitation?: DwellingCohabitation; };
+
+// ── 角色作息轮转 ──
+const ROOM_SCHEDULE: Record<string, Partial<Record<TimeSlot, string>>> = {
+    "玄关": { morning: "在玄关整理出门的东西", evening: "刚回来，正在换鞋" },
+    "厨房": { dawn: "在厨房烧水准备早餐", morning: "在收拾厨房", noon: "在准备午餐", evening: "在做晚饭" },
+    "客厅": { afternoon: "窝在沙发上看手机", night: "靠在沙发上看电视" },
+    "卧室": { latenight: "已经睡下了", dawn: "还没完全醒来" },
+    "书房": { noon: "在书房安静地看书", afternoon: "在书桌前写着什么", night: "开着台灯翻书" },
+    "阳台": { morning: "在阳台晒太阳", evening: "在阳台看日落" },
+    "浴室": { night: "在洗澡", morning: "在洗漱" },
 };
+const WEATHER_ACTIVITY_MODIFIERS: Partial<Record<DwellingWeather, Record<string, string>>> = {
+    rainy: { "客厅": "听着雨声窝在沙发上", "卧室": "听着窗外的雨声发呆", "阳台": "站在阳台看雨" },
+    snowy: { "客厅": "裹着毯子窝在暖气旁", "阳台": "趴在窗边看雪" },
+    stormy: { "客厅": "缩在沙发上有些不安", "卧室": "把自己裹进了被子里" },
+};
+
+export function refreshCharacterLocation(layout: DwellingLayout): boolean {
+    if (!layout.cohabitation?.enabled) return false;
+    const slot = getTimeSlot(); const weather = getTodayWeather(); const rooms = layout.rooms;
+    if (!rooms.length) return false;
+    let bestRoom: DwellingRoom | null = null; let bestActivity = "";
+    const weatherMod = WEATHER_ACTIVITY_MODIFIERS[weather];
+    if (weatherMod) { for (const room of rooms) { for (const [kw, act] of Object.entries(weatherMod)) { if (room.name.includes(kw)) { bestRoom = room; bestActivity = act; break; } } if (bestRoom) break; } }
+    if (!bestRoom) { for (const room of rooms) { for (const [kw, schedule] of Object.entries(ROOM_SCHEDULE)) { if (room.name.includes(kw) && schedule[slot]) { bestRoom = room; bestActivity = schedule[slot]!; break; } } if (bestRoom) break; } }
+    if (!bestRoom) { const idx = (new Date().getHours() * 7) % rooms.length; bestRoom = rooms[idx]; const g: Record<TimeSlot, string> = { dawn: "似乎还在半梦半醒", morning: "在发呆", noon: "安静待着", afternoon: "在做自己的事", evening: "正看着窗外", night: "安静待在这里", latenight: "还没有睡" }; bestActivity = g[slot]; }
+    const mood = layout.cohabitation.mood;
+    if (mood && mood.intensity > 0.5) { const ms: Partial<Record<DwellingMood, string>> = { happy: "，看起来心情不错", sleepy: "，有些犯困的样子", annoyed: "，表情有点不耐烦", shy: "，耳朵微微泛红", melancholy: "，望着远处出神", excited: "，眼里带着光" }; if (ms[mood.mood]) bestActivity += ms[mood.mood]; }
+    const changed = layout.cohabitation.currentRoomId !== bestRoom.id || layout.cohabitation.currentActivity !== bestActivity;
+    layout.cohabitation.currentRoomId = bestRoom.id; layout.cohabitation.currentActivity = bestActivity; layout.cohabitation.lastActivityUpdate = Date.now();
+    return changed;
+}
+
+// ── 情绪计算 ──
+export function computeMood(cohabitation: DwellingCohabitation): DwellingMoodState {
+    const prev = cohabitation.mood; const interactions = prev?.recentInteractions ?? 0; const h = new Date().getHours();
+    let mood: DwellingMood = "calm"; let intensity = 0.5;
+    if (interactions >= 8) { mood = "happy"; intensity = 0.8; } else if (interactions >= 5) { mood = "happy"; intensity = 0.6; } else if (interactions >= 3) { mood = "calm"; intensity = 0.5; } else if (interactions <= 1 && h >= 20) { mood = "melancholy"; intensity = 0.6; } else if (interactions === 0) { mood = "sleepy"; intensity = 0.4; }
+    if (h >= 23 || h < 5) { mood = "sleepy"; intensity = Math.max(intensity, 0.7); }
+    return { mood, intensity, updatedAt: Date.now(), recentInteractions: interactions };
+}
+export function incrementInteractionCount(cohabitation: DwellingCohabitation): void {
+    if (!cohabitation.mood) { cohabitation.mood = { mood: "calm", intensity: 0.5, updatedAt: Date.now(), recentInteractions: 1 }; } else { cohabitation.mood.recentInteractions += 1; }
+    cohabitation.mood = computeMood(cohabitation);
+}
+export const MOOD_LABELS: Record<DwellingMood, string> = { happy: "😊 开心", calm: "😌 平静", sleepy: "😴 犯困", annoyed: "😤 不耐烦", shy: "☺️ 害羞", excited: "✨ 兴奋", melancholy: "🌙 惆怅" };
 
 // ── IndexedDB (Dexie) ─────────────────────────
 
