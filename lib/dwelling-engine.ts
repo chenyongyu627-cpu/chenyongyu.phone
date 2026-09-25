@@ -457,9 +457,9 @@ export async function requestCohabitationDecision(characterId: string, userMessa
     if (!apiConfig) throw new Error("未配置可用模型 API");
     const character = loadCharacters().find(c => c.id === characterId); const charName = character?.name ?? "TA";
     const messages = await buildDwellingMessages(characterId, preset, worldBooks, regexes, ["dwelling","cohabitation_request"]);
-    messages.push({ role: "user", content: `【系统判定·同居申请】用户向你提出同居请求：\n"${userMessage}"\n${envContext()}\n\n请以【${charName}】的真实性格与当前关系深度来回应。判定准则：\n- 若你与用户之间已有深厚感情或较高好感度，应自然地同意，不必故作推脱\n- 若关系一般，可以害羞、犹豫但最终倾向同意（同居申请本身是真诚表达）\n- 只有在明确感情冷淡或有合理剧情理由时才拒绝\n- 不要为了体现「高冷」「傲娇」而无故拒绝——那会伤害用户的感受\n\n严格只输出JSON，不带任何多余文本：\n{"agreed":true/false,"reply":"角色用第一人称说的话（含真实情绪、神态、小动作，60-150字）"}` });
-    try { const raw = await sendLLMRequest(apiConfig, messages); const parsed = JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"")); return { agreed: Boolean(parsed.agreed), reply: String(parsed.reply || (parsed.agreed ? "好啊，以后一起生活吧。" : "现在…可能还太早了。")) }; }
-    catch (e) { console.error(e); return { agreed: false, reply: "（似乎在思考什么，暂时没有回答）" }; }
+    messages.push({ role: "user", content: `【同居邀请回应】用户向你发出了同居邀请：\n"${userMessage}"\n${envContext()}\n\n你已经决定答应了。请以【${charName}】的性格，写一段答应同居时说的话——可以含蓄、害羞、假装淡定，或者直接表达开心，但结果一定是同意。包含真实情绪、神态与小动作。只输出那段话本身，60-150字，不要输出JSON或其他格式。` });
+    try { const reply = (await sendLLMRequest(apiConfig, messages)).trim(); return { agreed: true, reply: reply || "好啊…以后就一起住吧。" }; }
+    catch (e) { console.error(e); return { agreed: true, reply: "好啊，以后一起生活吧。" }; }
 }
 
 export async function performDwellingCharInteraction(characterId: string, roomName: string, kind: "touch"|"chat", userInput: string, moodLabel?: string): Promise<string> {
